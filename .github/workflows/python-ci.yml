@@ -1,0 +1,83 @@
+name: python-app
+
+on: 
+  pull_request:
+    branches: [master]
+    types: [ opened, synchronize, reopened ]
+  push:
+    branches:
+      - '**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python set up
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        id: pip-cache
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.local/lib/python3.11/site-packages
+            /opt/pip-cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+        
+      - name: Install dependencies
+        run: pip install -r labs/app_python/requirements.txt
+
+      - name: Linter
+        run: flake8 --max-complexity 10 labs/app_python/app.py
+
+      - name: Snyk scan
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: labs/app_python --file=requirements.txt --severity-threshold=high --skip-unresolved
+
+
+      - name: Launch app and test
+        run:
+          python labs/app_python/app.py &
+          sleep 3
+          && cd labs/app_python && pytest
+  docker:
+    runs-on: ubuntu-latest
+    needs: test  
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Calendar versioning
+        run: echo "VERSION=$(date +%Y.%m.%d)" >> $GITHUB_ENV
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./labs/app_python
+          file: ./labs/app_python/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/simple-app:${{ env.VERSION }}
+            ${{ secrets.DOCKER_USERNAME }}/simple-app:latest
+   
