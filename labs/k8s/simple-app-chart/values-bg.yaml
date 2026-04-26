@@ -1,0 +1,17 @@
+replicaCount: 1
+image:
+  tag: "latest"
+service:
+  type: NodePort
+resources:
+  limits:
+    cpu: 100m
+    memory: 248Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+livenessProbe:
+  initialDelaySeconds: 5
+readinessProbe:
+  initialDelaySeconds: 5
+strategy: bluegreen
